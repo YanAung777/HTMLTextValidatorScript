@@ -2,10 +2,6 @@
 
 A hardened, OWASP-aligned client-side validator for rich-text comment fields. Defends against XSS, injection, and obfuscation attacks across 8 independent check layers — without blocking legitimate formatted content.
 
-Disclaimer / Use at Own Risk — clarifies this is client-side only, provides no security guarantees, and the maintainers accept no liability for breaches.
-
-Open Source License Statement — establishes the MIT licence terms, contribution expectations, and responsible disclosure policy for security issues.
-
 ## Files
 
 | File | Purpose |
