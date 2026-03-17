@@ -1,4 +1,4 @@
-# comment-validator
+# Comment-Validator
 
 A hardened, OWASP-aligned client-side validator for rich-text comment fields. Defends against XSS, injection, and obfuscation attacks across 8 independent check layers — without blocking legitimate formatted content.
 
@@ -6,7 +6,7 @@ A hardened, OWASP-aligned client-side validator for rich-text comment fields. De
 
 | File | Purpose |
 |---|---|
-| `validateCommentImproved.js` | Core validator module v4.1 — import this into your project |
+| `validateComment.js` | Core validator module v4.1 — import this into your project |
 | `validator-ui.html` | Interactive test UI — open in a browser to test payloads live |
 | `validator.test.html` | Automated test suite — 20 attack cases with pass/fail reporting |
 
