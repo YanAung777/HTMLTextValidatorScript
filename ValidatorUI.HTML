@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comment Validator v4.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0f12;
+    --surface:   #13161b;
+    --surface2:  #1a1e25;
+    --border:    #252a33;
+    --border2:   #2f3540;
+    --text:      #c8cdd6;
+    --text-dim:  #5a6272;
+    --text-mid:  #8892a4;
+    --accent:    #4fffb0;
+    --accent-dim:#1a4035;
+    --warn:      #ffc84a;
+    --warn-dim:  #3a2e0a;
+    --err:       #ff5c5c;
+    --err-dim:   #2e0f0f;
+    --pass:      #4fffb0;
+    --pass-dim:  #0d2e1f;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  html { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .header-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 2px 8px;
+  }
+  .header-title {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+  .header-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+    font-family: var(--mono);
+  }
+
+  /* ── Layout ── */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ── Editor Panel ── */
+  .editor-panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 1.75rem 2rem;
+    gap: 1rem;
+  }
+
+  .panel-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 6px 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+  }
+  .toolbar button {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-mid);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .toolbar button:hover { background: var(--surface); color: var(--text); border-color: var(--text-dim); }
+  .toolbar .sep { width: 1px; height: 16px; background: var(--border2); margin: 0 4px; }
+
+  .editor-wrap { flex: 1; position: relative; }
+  #editor {
+    width: 100%;
+    min-height: 220px;
+    height: 100%;
+    padding: 14px 16px;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    border: 1px solid var(--border);
+    border-radius: 0 0 6px 6px;
+    outline: none;
+    color: var(--text);
+    background: var(--surface);
+    resize: vertical;
+    transition: border-color 0.15s;
+  }
+  #editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+  #editor:focus { border-color: var(--border2); }
+  #editor.state-valid   { border-color: var(--accent); }
+  #editor.state-error   { border-color: var(--err); }
+  #editor.state-warning { border-color: var(--warn); }
+
+  .editor-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .char-count { color: var(--text-dim); }
+  .char-count.near { color: var(--warn); }
+  .char-count.over { color: var(--err); }
+  .live-status { font-weight: 500; }
+  .live-status.valid   { color: var(--accent); }
+  .live-status.error   { color: var(--err); }
+  .live-status.warning { color: var(--warn); }
+  .live-status.empty   { color: var(--text-dim); }
+
+  /* ── Attack Presets ── */
+  .presets-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .presets-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .preset-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text-mid);
+    cursor: pointer;
+    transition: all 0.1s;
+    white-space: nowrap;
+  }
+  .preset-btn:hover { border-color: var(--text-dim); color: var(--text); background: var(--surface); }
+  .preset-btn.attack:hover { border-color: var(--err); color: var(--err); background: var(--err-dim); }
+  .preset-btn.safe:hover   { border-color: var(--accent); color: var(--accent); background: var(--pass-dim); }
+
+  .submit-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .submit-btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 9px 22px;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .submit-btn:hover:not(:disabled) { background: var(--accent); color: #000; }
+  .submit-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: var(--border2); color: var(--text-dim); background: transparent; }
+  .submit-confirm { font-family: var(--mono); font-size: 12px; color: var(--accent); opacity: 0; transition: opacity 0.3s; }
+  .submit-confirm.show { opacity: 1; }
+
+  /* ── Results Panel ── */
+  .results-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    overflow-y: auto;
+  }
+
+  .results-header {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.5rem 0.75rem;
+    z-index: 10;
+  }
+  .results-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  /* status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-family: var(--mono);
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .status-bar.valid   { border-color: var(--accent); background: var(--pass-dim); color: var(--accent); }
+  .status-bar.error   { border-color: var(--err);    background: var(--err-dim);  color: var(--err); }
+  .status-bar.warning { border-color: var(--warn);   background: var(--warn-dim); color: var(--warn); }
+  .status-bar.empty   { color: var(--text-dim); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .status-text { font-weight: 600; }
+
+  /* rules */
+  .results-body { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 6px; }
+
+  .rule-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .rule-row.idle    { }
+  .rule-row.pass    { border-color: #1a3328; background: #0d1f18; }
+  .rule-row.fail    { border-color: #3a1212; background: #1c0a0a; }
+  .rule-row.warning { border-color: #3a2a00; background: #1c1500; }
+
+  .rule-icon {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    width: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .rule-row.idle    .rule-icon { color: var(--text-dim); }
+  .rule-row.pass    .rule-icon { color: var(--accent); }
+  .rule-row.fail    .rule-icon { color: var(--err); }
+  .rule-row.warning .rule-icon { color: var(--warn); }
+
+  .rule-content { flex: 1; min-width: 0; }
+  .rule-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .rule-row.idle    .rule-name { color: var(--text-dim); }
+  .rule-row.pass    .rule-name { color: var(--accent); }
+  .rule-row.fail    .rule-name { color: var(--err); }
+  .rule-row.warning .rule-name { color: var(--warn); }
+
+  .rule-detail {
+    font-size: 11px;
+    color: var(--text-mid);
+    margin-top: 1px;
+    font-family: var(--mono);
+    word-break: break-word;
+  }
+  .rule-row.fail    .rule-detail { color: #c07070; }
+  .rule-row.warning .rule-detail { color: #c09a40; }
+
+  .results-footer {
+    padding: 0.75rem 1.5rem 1rem;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+
+  @media (max-width: 800px) {
+    .main { grid-template-columns: 1fr; }
+    .editor-panel { border-right: none; border-bottom: 1px solid var(--border); }
+    .results-panel { max-height: 480px; }
+    .header-sub { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-badge">v4.1</div>
+  <div class="header-title">Comment Validator</div>
+  <div class="header-sub">OWASP-aligned · Rich-text · Client-side</div>
+</header>
+
+<div class="main">
+
+  <!-- ── Left: Editor ── -->
+  <div class="editor-panel">
+    <div class="panel-label">Input</div>
+
+    <div>
+      <div class="toolbar">
+        <button onmousedown="e(event);fmt('bold')"><b>B</b></button>
+        <button onmousedown="e(event);fmt('italic')"><i>I</i></button>
+        <button onmousedown="e(event);fmt('underline')"><u>U</u></button>
+        <div class="sep"></div>
+        <button onmousedown="e(event);fmt('insertUnorderedList')">• List</button>
+        <button onmousedown="e(event);fmt('insertOrderedList')">1. List</button>
+        <div class="sep"></div>
+        <button onmousedown="e(event);fmt('createLink')">Link</button>
+        <button onmousedown="e(event);clearFmt()">Clear</button>
+      </div>
+      <div class="editor-wrap">
+        <div id="editor"
+             contenteditable="true"
+             spellcheck="true"
+             data-placeholder="Type or paste a comment — or pick an attack preset below…"></div>
+      </div>
+    </div>
+
+    <div class="editor-meta">
+      <span id="char-count" class="char-count">0 / 8000</span>
+      <span id="live-status" class="live-status empty">—</span>
+    </div>
+
+    <!-- Attack presets -->
+    <div>
+      <div class="presets-label">Attack presets</div>
+      <div class="presets-grid" id="presets"></div>
+    </div>
+
+    <!-- Submit -->
+    <div class="submit-row">
+      <button class="submit-btn" id="submit-btn" disabled>Post Comment</button>
+      <span class="submit-confirm" id="submit-confirm">Comment posted ✓</span>
+    </div>
+  </div>
+
+  <!-- ── Right: Results ── -->
+  <div class="results-panel">
+    <div class="results-header">
+      <div class="results-title">Validation Results</div>
+      <div class="status-bar empty" id="status-bar">
+        <div class="status-dot"></div>
+        <span class="status-text" id="status-text">Awaiting input</span>
+      </div>
+    </div>
+
+    <div class="results-body" id="rules-body"></div>
+
+    <div class="results-footer" id="results-footer">
+      checks: 8 layers · null byte · C1 chars · injection patterns · tag allow-list · attr allow-list · char allow-list
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   VALIDATOR v4 — full inline copy
+═══════════════════════════════════════════════════════════════ */
+const SAFE_TAGS = new Set(['B','I','U','EM','STRONG','A','UL','OL','LI','P','BR','SPAN','DIV']);
+const SAFE_ATTRS = new Set(['href','target','rel','title','class']);
+const SAFE_TARGET_VALUES = new Set(['_blank','_self','_parent','_top']);
+const ALLOWED_PROTOCOLS = /^(https?|mailto|tel):/i;
+const INJECTION_PATTERNS = [
+  /javascript\s*:/i, /vbscript\s*:/i,
+  /data\s*:\s*text\/(html|xml)/i,
+  /data\s*:\s*(image\/svg|application\/)/i,
+  /expression\s*\(/i, /on[a-z]{2,}\s*=/i,
+  /<[^>]*\bon\w+\s*=/i, /<[^>]*script/i,
+  /<[^>]*iframe/i, /<[^>]*object/i, /<[^>]*embed/i,
+  /<[^>]*svg/i, /<[^>]*math/i, /<[^>]*base[\s>]/i,
+  /formaction\s*=/i,
+];
+const decodeEntities = s =>
+  s.replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code) => {
+    const n = (code.startsWith('x')||code.startsWith('X'))
+      ? parseInt(code.slice(1),16) : parseInt(code,10);
+    return (n>0 && n<0x110000) ? String.fromCharCode(n) : '';
+  });
+const normalizeHtml = h =>
+  h.replace(/%([0-9a-fA-F]{2})/g, (_,x) => String.fromCharCode(parseInt(x,16)))
+   .replace(/[\x00-\x1F\x7F-\x9F]/g,'')
+   .replace(/[\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF\uFFFE\uFFFF]/g,'');
+
+const validateComment = ({ html, text }) => {
+  const trimmed = (text||'').trim();
+  const errors=[], warnings=[];
+
+  if (html.length > 102400) { errors.push('Input too large (max 100 KB)'); return {valid:false,errors,warnings}; }
+
+  const dec = html.replace(/%([0-9a-fA-F]{2})/g, (_,x) => String.fromCharCode(parseInt(x,16)));
+  if (/\x00/.test(dec))                              errors.push('Null byte detected');
+  if (INJECTION_PATTERNS.some(p => p.test(dec)))     errors.push('Injection pattern in percent-decoded input');
+  if (/[\x7F-\x9F]/.test(html))                      errors.push('C1 control characters detected');
+  if (trimmed.length < 1 || trimmed.length > 8000)   errors.push('Length must be 1–8000 characters');
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(trimmed)) errors.push('Invalid control characters');
+  if (/(.)\1{14,}/.test(trimmed))                    warnings.push('Excessive repetition (possible spam)');
+  if (INJECTION_PATTERNS.some(p => p.test(normalizeHtml(html)))) errors.push('Unsafe HTML/script pattern detected');
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const bad = [...tmp.querySelectorAll('*')].find(el => !SAFE_TAGS.has(el.tagName));
+  if (bad) errors.push(`Tag not allowed: <${bad.tagName.toLowerCase()}>`);
+
+  let ae = null;
+  tmp.querySelectorAll('*').forEach(el => {
+    if (ae) return;
+    const anc = el.tagName === 'A';
+    Array.from(el.attributes).forEach(a => {
+      if (ae) return;
+      const n = a.name.toLowerCase();
+      if ((n==='rel'||n==='target') && !anc) { ae=`"${n}" only allowed on <a>`; return; }
+      if (!SAFE_ATTRS.has(n)) { ae=`Attribute not allowed: ${n}`; return; }
+      if (n==='href') {
+        const v=decodeEntities(a.value.trim());
+        const safeProt = v==='' || v.startsWith('#') ||
+          (v.startsWith('/') && !v.startsWith('//')) || ALLOWED_PROTOCOLS.test(v);
+        if (!safeProt) ae=`Unsafe href: ${a.value.slice(0,50)}`;
+      }
+      if (n==='target' && !SAFE_TARGET_VALUES.has(a.value.trim().toLowerCase()))
+        ae=`Unsafe target: ${a.value.slice(0,20)}`;
+    });
+  });
+  if (ae) errors.push(ae);
+
+  const dt = trimmed.replace(/&[a-z][a-z0-9]*;/gi,'X').replace(/&#[0-9]+;/gi,'X').replace(/&#x[0-9a-f]+;/gi,'X');
+  if (!/^[\p{L}\p{N}\p{P}\p{S}\p{Z}\p{Emoji_Presentation}\n\r\t\s]*$/u.test(dt))
+    errors.push('Unsupported characters detected');
+
+  return { valid: errors.length===0, errors, warnings };
+};
+
+
+/* ═══════════════════════════════════════════════════════════════
+   EDITOR HTML SANITISER
+   Normalises browser-injected markup before the validator sees it.
+   execCommand output varies by browser:
+     Chrome bold  -> <span style="font-weight:bold">  (style= would be blocked)
+     Firefox bold -> <b>                              (fine)
+     Safari bold  -> <b style="...">                 (style= would be blocked)
+     Some browsers inject id= on list items, dir= on text, etc.
+   This strips disallowed attributes and maps legacy tags to semantic
+   equivalents so the validator only sees user intent, not browser quirks.
+=============================================================== */
+function sanitiseEditorHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+
+  // Replace legacy/non-semantic tags with safe equivalents
+  const TAG_MAP = { STRIKE:'S', DEL:'S', FONT:'SPAN', BOLD:'B', ITALIC:'I', TT:'CODE' };
+  [...tmp.querySelectorAll('strike,del,font,bold,italic,tt')].forEach(el => {
+    const repl = document.createElement(TAG_MAP[el.tagName] || 'SPAN');
+    repl.innerHTML = el.innerHTML;
+    el.replaceWith(repl);
+  });
+
+  // Strip every attribute not in the safe set; enforce rel/target on <a> only
+  tmp.querySelectorAll('*').forEach(el => {
+    const isAnchor = el.tagName === 'A';
+    [...el.attributes].forEach(attr => {
+      const n = attr.name.toLowerCase();
+      if (!SAFE_ATTRS.has(n) || ((n==='rel'||n==='target') && !isAnchor))
+        el.removeAttribute(attr.name);
+    });
+  });
+
+  return tmp.innerHTML;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI DEFINITIONS
+═══════════════════════════════════════════════════════════════ */
+const RULE_DEFS = [
+  { id:'size',    label:'Size cap',             desc:'Max 100 KB raw HTML' },
+  { id:'null',    label:'Null byte',            desc:'%00 decoded before DOM touch' },
+  { id:'inject',  label:'Injection (decoded)',  desc:'Patterns on percent-decoded string' },
+  { id:'c1',      label:'C1 control chars',     desc:'\\x7F–\\x9F on raw HTML' },
+  { id:'length',  label:'Text length',          desc:'1–8000 characters' },
+  { id:'c0',      label:'C0 control chars',     desc:'\\x00–\\x1F on text layer' },
+  { id:'spam',    label:'Spam repetition',      desc:'15+ identical consecutive chars', warn:true },
+  { id:'pattern', label:'Injection patterns',   desc:'16 patterns — normalised HTML' },
+  { id:'tags',    label:'Tag allow-list',       desc:'b i u em strong a ul ol li p br span div' },
+  { id:'attrs',   label:'Attribute allow-list', desc:'href target rel title class only' },
+  { id:'chars',   label:'Character allow-list', desc:'Unicode letters/numbers/punct/emoji' },
+];
+
+const PRESETS = [
+  { label:'Event handler',       payload:'Hello <img src=x onerror=alert(1)>',                        type:'attack' },
+  { label:'javascript: href',    payload:'<a href="javascript:alert(\'XSS\')">Click</a>',              type:'attack' },
+  { label:'Mixed-case script',   payload:'<ScRiPt>alert(\'Hi\')</ScRiPt>',                            type:'attack' },
+  { label:'data: URI',           payload:'<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Click</a>', type:'attack' },
+  { label:'SVG onload',          payload:'<svg onload=alert(1)>',                                      type:'attack' },
+  { label:'Entity-encoded href', payload:'<a href="&#x6A;avascript:alert(1)">Click</a>',              type:'attack' },
+  { label:'Null byte',           payload:'Hello%00<script>alert(1)</script>',                         type:'attack', raw:true },
+  { label:'C1 control chars',    payload:'Hidden\x9CControl\x9DChars',                                type:'attack', raw:true },
+  { label:'base hijack',         payload:'<base href="https://evil.com/">',                            type:'attack' },
+  { label:'formaction hijack',    payload:'<form><button formaction="javascript:alert(1)">Click</button></form>', type:'attack' },
+  { label:'Spam repeat',         payload:'Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',                 type:'attack' },
+  { label:'Plain text',          payload:'Great post — really helpful! Thanks 👍',                    type:'safe' },
+  { label:'Safe rich text',      payload:'<b>Bold</b> and <a href="https://example.com" target="_blank" rel="noopener">a link</a>', type:'safe' },
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   BUILD UI
+═══════════════════════════════════════════════════════════════ */
+// Rules
+const rulesBody = document.getElementById('rules-body');
+RULE_DEFS.forEach(r => {
+  const d = document.createElement('div');
+  d.className = 'rule-row idle';
+  d.id = 'rule-' + r.id;
+  d.innerHTML = `<div class="rule-icon">○</div>
+    <div class="rule-content">
+      <div class="rule-name">${r.label}</div>
+      <div class="rule-detail">${r.desc}</div>
+    </div>`;
+  rulesBody.appendChild(d);
+});
+
+// Presets
+const presetsEl = document.getElementById('presets');
+PRESETS.forEach(p => {
+  const b = document.createElement('button');
+  b.className = `preset-btn ${p.type}`;
+  b.textContent = p.label;
+  b.addEventListener('click', () => loadPreset(p));
+  presetsEl.appendChild(b);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   LOGIC
+═══════════════════════════════════════════════════════════════ */
+const editor = document.getElementById('editor');
+let debounce;
+
+function e(ev) { ev.preventDefault(); }
+
+function fmt(cmd) {
+  if (cmd === 'createLink') {
+    const url = prompt('URL (https://…)');
+    if (url) document.execCommand('createLink', false, url);
+  } else {
+    document.execCommand(cmd, false, null);
+  }
+  runValidation();
+}
+function clearFmt() { document.execCommand('removeFormat', false, null); runValidation(); }
+
+function loadPreset(p) {
+  if (p.raw) {
+    editor.textContent = p.payload;
+  } else {
+    editor.innerHTML = p.payload;
+  }
+  runValidation();
+  editor.focus();
+}
+
+editor.addEventListener('input', () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(runValidation, 80);
+});
+
+editor.addEventListener('paste', ev => {
+  ev.preventDefault();
+  const plain = ev.clipboardData?.getData('text/plain') ?? '';
+  if (plain) document.execCommand('insertText', false, plain);
+  runValidation();
+});
+
+function runValidation() {
+  const rawHtml  = editor.innerHTML;                  // untouched — for threat checks
+  const html     = sanitiseEditorHtml(rawHtml);       // cleaned  — for structural checks
+  const text     = editor.innerText || editor.textContent || '';
+  const len      = (text||'').trim().length;
+
+  // char counter
+  const cc = document.getElementById('char-count');
+  cc.textContent = `${len.toLocaleString()} / 8,000`;
+  cc.className   = 'char-count' + (len > 8000 ? ' over' : len > 7000 ? ' near' : '');
+
+  if (!text.trim()) {
+    resetUI(); return;
+  }
+
+  // Validator receives sanitised html (structural checks) but raw for threat checks
+  const result = validateComment({ html: rawHtml, text });
+
+  // Rule display uses both: raw for threat rows, sanitised for structural rows
+  updateRules(result, html, rawHtml, text);
+
+  // Status bar
+  const sb   = document.getElementById('status-bar');
+  const st   = document.getElementById('status-text');
+  const ls   = document.getElementById('live-status');
+  const sub  = document.getElementById('submit-btn');
+  const edCl = ['state-valid','state-error','state-warning'];
+  editor.classList.remove(...edCl);
+
+  if (result.errors.length) {
+    sb.className   = 'status-bar error';
+    st.textContent = `${result.errors.length} error${result.errors.length>1?'s':''} — blocked`;
+    ls.className   = 'live-status error';
+    ls.textContent = 'BLOCKED';
+    editor.classList.add('state-error');
+    sub.disabled   = true;
+  } else if (result.warnings.length) {
+    sb.className   = 'status-bar warning';
+    st.textContent = `${result.warnings.length} warning — review before posting`;
+    ls.className   = 'live-status warning';
+    ls.textContent = 'WARNING';
+    editor.classList.add('state-warning');
+    sub.disabled   = false;
+  } else {
+    sb.className   = 'status-bar valid';
+    st.textContent = 'Valid — ready to post';
+    ls.className   = 'live-status valid';
+    ls.textContent = 'VALID';
+    editor.classList.add('state-valid');
+    sub.disabled   = false;
+  }
+
+  // Footer
+  const foot = document.getElementById('results-footer');
+  const errMsgs = result.errors.concat(result.warnings);
+  foot.textContent = errMsgs.length
+    ? errMsgs.join(' · ')
+    : 'All checks passed';
+  foot.style.color = result.errors.length ? 'var(--err)' : result.warnings.length ? 'var(--warn)' : 'var(--text-dim)';
+}
+
+function updateRules(result, html, rawHtml, text) {
+  const trimmed = (text||'').trim();
+  // Threat checks: use rawHtml (pre-sanitise) so null bytes and C1 chars are visible
+  const dec  = rawHtml.replace(/%([0-9a-fA-F]{2})/g, (_,x) => String.fromCharCode(parseInt(x,16)));
+  const norm = normalizeHtml(rawHtml);
+  // Structural checks: use sanitised html so browser-injected attrs don't cause noise
+  const tmp2 = document.createElement('div'); tmp2.innerHTML = html;
+
+  const checks = {
+    size:    { pass: rawHtml.length <= 102400,            msg: rawHtml.length > 102400 ? 'Input exceeds 100 KB' : `${(rawHtml.length/1024).toFixed(1)} KB` },
+    null:    { pass: !/\x00/.test(dec),                   msg: /\x00/.test(dec) ? 'Null byte found in decoded input' : 'No null bytes' },
+    inject:  { pass: !INJECTION_PATTERNS.some(p=>p.test(dec)), msg: INJECTION_PATTERNS.some(p=>p.test(dec)) ? 'Pattern matched in decoded input' : 'Clean' },
+    c1:      { pass: !/[\x7F-\x9F]/.test(rawHtml),        msg: /[\x7F-\x9F]/.test(rawHtml) ? 'C1 chars present in raw HTML' : 'No C1 chars' },
+    length:  { pass: trimmed.length>=1 && trimmed.length<=8000, msg: `${trimmed.length} chars` },
+    c0:      { pass: !/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(trimmed), msg: /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(trimmed) ? 'C0 control chars in text' : 'No C0 chars' },
+    spam:    { pass: !/(.)\1{14,}/.test(trimmed), warn: /(.)\1{14,}/.test(trimmed), msg: /(.)\1{14,}/.test(trimmed) ? '15+ identical chars detected' : 'No excessive repetition' },
+    pattern: { pass: !INJECTION_PATTERNS.some(p=>p.test(norm)), msg: INJECTION_PATTERNS.some(p=>p.test(norm)) ? 'Pattern matched in normalised HTML' : 'Clean' },
+    tags:    (() => {
+      const bd = [...tmp2.querySelectorAll('*')].find(el => !SAFE_TAGS.has(el.tagName));
+      return { pass: !bd, msg: bd ? `<${bd.tagName.toLowerCase()}> not allowed` : 'All tags safe' };
+    })(),
+    attrs:   (() => {
+      let ae2=null;
+      tmp2.querySelectorAll('*').forEach(el => {
+        if (ae2) return;
+        const anc=el.tagName==='A';
+        Array.from(el.attributes).forEach(a => {
+          if (ae2) return;
+          const n=a.name.toLowerCase();
+          if ((n==='rel'||n==='target')&&!anc){ae2=`"${n}" only on <a>`;return;}
+          if (!SAFE_ATTRS.has(n)){ae2=`${n} not allowed`;return;}
+          if (n==='href'){const v=decodeEntities(a.value.trim());const sp=v===''||v.startsWith('#')||(v.startsWith('/')&&!v.startsWith('//'))||ALLOWED_PROTOCOLS.test(v);if(!sp){ae2=`Unsafe href`;}}
+          if (n==='target'&&!SAFE_TARGET_VALUES.has(a.value.trim().toLowerCase())){ae2=`Unsafe target value`;}
+        });
+      });
+      return { pass: !ae2, msg: ae2 || 'All attributes safe' };
+    })(),
+    chars:   (() => {
+      const dt=trimmed.replace(/&[a-z][a-z0-9]*;/gi,'X').replace(/&#[0-9]+;/gi,'X').replace(/&#x[0-9a-f]+;/gi,'X');
+      const ok=/^[\p{L}\p{N}\p{P}\p{S}\p{Z}\p{Emoji_Presentation}\n\r\t\s]*$/u.test(dt);
+      return { pass: ok, msg: ok ? 'Characters valid' : 'Unsupported characters' };
+    })(),
+  };
+
+  RULE_DEFS.forEach(r => {
+    const c = checks[r.id];
+    if (!c) return;
+    const el   = document.getElementById('rule-' + r.id);
+    const icon = el.querySelector('.rule-icon');
+    const det  = el.querySelector('.rule-detail');
+    if (c.warn && !c.pass) {
+      el.className   = 'rule-row warning';
+      icon.textContent = '!';
+      det.textContent  = c.msg;
+    } else if (!c.pass) {
+      el.className   = 'rule-row fail';
+      icon.textContent = '✕';
+      det.textContent  = c.msg;
+    } else {
+      el.className   = 'rule-row pass';
+      icon.textContent = '✓';
+      det.textContent  = c.msg;
+    }
+  });
+}
+
+function resetUI() {
+  RULE_DEFS.forEach(r => {
+    const el = document.getElementById('rule-' + r.id);
+    el.className = 'rule-row idle';
+    el.querySelector('.rule-icon').textContent = '○';
+    el.querySelector('.rule-detail').textContent = RULE_DEFS.find(x=>x.id===r.id).desc;
+  });
+  document.getElementById('status-bar').className = 'status-bar empty';
+  document.getElementById('status-text').textContent = 'Awaiting input';
+  document.getElementById('live-status').className = 'live-status empty';
+  document.getElementById('live-status').textContent = '—';
+  document.getElementById('submit-btn').disabled = true;
+  editor.className = '';
+  document.getElementById('results-footer').textContent = 'checks: 8 layers · null byte · C1 chars · injection patterns · tag allow-list · attr allow-list · char allow-list';
+  document.getElementById('results-footer').style.color = '';
+}
+
+document.getElementById('submit-btn').addEventListener('click', () => {
+  const c = document.getElementById('submit-confirm');
+  c.classList.add('show');
+  setTimeout(() => c.classList.remove('show'), 2500);
+});
+</script>
+</body>
+</html>
