@@ -2,13 +2,19 @@
 
 A hardened, OWASP-aligned client-side validator for rich-text comment fields. Defends against XSS, injection, and obfuscation attacks across 8 independent check layers — without blocking legitimate formatted content.
 
+Disclaimer / Use at Own Risk — clarifies this is client-side only, provides no security guarantees, and the maintainers accept no liability for breaches.
+
+Open Source License Statement — establishes the MIT licence terms, contribution expectations, and responsible disclosure policy for security issues.
+
 ## Files
 
 | File | Purpose |
 |---|---|
+| `HTMLSanitiser.js` |Normalises browser-injected markup before the validator sees it. |
 | `ValidateComment.js` | Core validator module v4.1 — import this into your project |
 | `ValidatorUI.HTML` | Interactive test UI — open in a browser to test payloads live |
 | `CalidatorTest.HTML` | Automated test suite — 20 attack cases with pass/fail reporting |
+
 
 ---
 
