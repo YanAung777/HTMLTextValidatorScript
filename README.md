@@ -7,8 +7,8 @@ A hardened, OWASP-aligned client-side validator for rich-text comment fields. De
 | File | Purpose |
 |---|---|
 | `ValidateComment.js` | Core validator module v4.1 — import this into your project |
-| `ValidatorUI.html` | Interactive test UI — open in a browser to test payloads live |
-| `CalidatorTest.html` | Automated test suite — 20 attack cases with pass/fail reporting |
+| `ValidatorUI.HTML` | Interactive test UI — open in a browser to test payloads live |
+| `CalidatorTest.HTML` | Automated test suite — 20 attack cases with pass/fail reporting |
 
 ---
 
