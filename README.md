@@ -280,6 +280,66 @@ const safe = decoded === '' ||
 
 ---
 
+## Security Disclaimer
+
+**This library is provided as a client-side defence layer only. Use it at your own risk.**
+
+Client-side validation is a convenience and usability measure — it is not a security boundary. Any attacker can bypass browser-side code by sending HTTP requests directly to your server, disabling JavaScript, or manipulating the DOM. This validator should always be paired with equivalent server-side sanitisation before storing or rendering user content.
+
+Specifically:
+
+- **This library does not guarantee protection** against all XSS, injection, or obfuscation attacks. Attack techniques evolve continuously and no client-side filter can be considered exhaustive.
+- **This library does not protect against SQL injection.** Use parameterised queries on your server. See the Integration Notes section.
+- **The maintainers accept no liability** for security breaches, data loss, or damages arising from the use or misuse of this library, whether or not the library was used as documented.
+- **Do not rely solely on this library** for compliance with GDPR, PCI-DSS, HIPAA, or any other regulatory framework that requires data security controls. Regulatory compliance requires a defence-in-depth strategy implemented at multiple layers of your stack.
+- **No warranty is provided**, expressed or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement.
+
+This library is designed to reduce risk and improve the user experience of comment moderation. It is one layer in a defence-in-depth strategy — not a replacement for one.
+
+---
+
+## Open Source
+
+This project is released under the **MIT Licence**. See the full licence text below.
+
+### What this means
+
+You are free to:
+- Use this library in personal, commercial, and open-source projects
+- Modify, adapt, and build upon the source code
+- Distribute original or modified versions
+- Include it in proprietary software without requiring your code to be open-sourced
+
+You must:
+- Include the original copyright notice and licence text in any distributed copy or substantial portion of the code
+
+You may not:
+- Hold the maintainers liable for damages arising from use of this software
+- Use the maintainers' names or project name to endorse or promote derived products without permission
+
+### Contributing
+
+Contributions are welcome. By submitting a pull request or issue you agree that your contribution will be licensed under the same MIT licence as this project. Please:
+
+- Open an issue before submitting large changes so the approach can be discussed
+- Keep pull requests focused — one fix or feature per PR
+- Include a test case in `validator.test.html` for any new attack vector or behaviour change
+- Update the changelog in `README.md` and the JSDoc header in `validateCommentImproved.js`
+
+### Security Vulnerabilities
+
+If you discover a security vulnerability in this library, **please do not open a public issue**.
+
+Instead, report it privately by emailing the maintainer directly (see repository contact details) or using GitHub's private vulnerability reporting feature if enabled on the repository. Please include:
+
+- A description of the vulnerability and the attack vector it enables
+- A proof-of-concept payload that demonstrates the bypass
+- The version(s) of the library affected
+
+We aim to acknowledge reports within 72 hours and publish a fix within 14 days of confirmation. Credit will be given in the changelog unless you prefer to remain anonymous.
+
+---
+
 ## Licence Text
 
 ```
