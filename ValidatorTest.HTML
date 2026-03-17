@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Comment Validator v4 — Attack Test Suite</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; font-size: 14px; background: #f5f5f4; color: #1c1917; padding: 2rem; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 0.25rem; }
+  .subtitle { color: #78716c; margin-bottom: 1.5rem; font-size: 13px; }
+  .summary { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .pill { padding: 4px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+  .pill.pass  { background: #dcfce7; color: #166534; }
+  .pill.fail  { background: #fee2e2; color: #991b1b; }
+  .pill.total { background: #e7e5e4; color: #44403c; }
+  .group { margin-bottom: 1.5rem; }
+  .group-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #a8a29e; margin-bottom: 0.5rem; padding: 0 2px; }
+  .case { background: #fff; border: 1px solid #e7e5e4; border-radius: 8px; margin-bottom: 6px; overflow: hidden; }
+  .case-header { display: flex; align-items: center; gap: 10px; padding: 9px 14px; }
+  .badge { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+  .badge.ok  { background: #dcfce7; color: #166534; }
+  .badge.err { background: #fee2e2; color: #991b1b; }
+  .case-name { font-weight: 500; flex: 1; font-size: 13px; }
+  .case-expected { font-size: 11px; color: #a8a29e; }
+  .case-body { border-top: 1px solid #f5f5f4; padding: 8px 14px 10px; background: #fafaf9; font-size: 12px; }
+  .payload { font-family: monospace; background: #f5f5f4; border-radius: 4px; padding: 3px 7px; margin-bottom: 6px; word-break: break-all; color: #57534e; font-size: 11px; }
+  .verdict .label { font-weight: 600; }
+  .verdict.correct .label { color: #166534; }
+  .verdict.wrong   .label { color: #991b1b; }
+  .detail { color: #78716c; margin-top: 3px; line-height: 1.5; }
+  .detail code { font-family: monospace; background: #f5f5f4; padding: 1px 4px; border-radius: 3px; font-size: 11px; color: #57534e; }
+  .note { color: #a8a29e; margin-top: 4px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>Comment Validator v4 — Attack Test Suite</h1>
+<p class="subtitle">All cases run in-browser. Attacks must return <code>valid: false</code>. Valid input must return <code>valid: true</code>.</p>
+
+<div class="summary" id="summary"></div>
+<div id="output"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════════
+   VALIDATOR — inline copy of validateCommentImproved.js v4
+═══════════════════════════════════════════════════════════════════════════════ */
+const SAFE_TAGS = new Set(['B','I','U','EM','STRONG','A','UL','OL','LI','P','BR','SPAN','DIV']);
+const SAFE_ATTRS = new Set(['href','target','rel','title','class']);
+const SAFE_TARGET_VALUES = new Set(['_blank','_self','_parent','_top']);
+
+const INJECTION_PATTERNS = [
+  /javascript\s*:/i,
+  /vbscript\s*:/i,
+  /data\s*:\s*text\/html/i,
+  /data\s*:\s*text\/xml/i,
+  /data\s*:\s*image\/svg/i,
+  /data\s*:\s*application\//i,
+  /expression\s*\(/i,
+  /on[a-z]{2,}\s*=/i,
+  /<[^>]*\bon\w+\s*=/i,
+  /<[^>]*script/i,
+  /<[^>]*iframe/i,
+  /<[^>]*object/i,
+  /<[^>]*embed/i,
+  /<[^>]*svg/i,
+  /<[^>]*math/i,
+  /<[^>]*base[\s>]/i,
+];
+
+const decodeHtmlEntities = (str) => {
+  const el = document.createElement('textarea');
+  el.innerHTML = str;
+  return el.value;
+};
+
+const normalizeHtml = (html) =>
+  html
+    .replace(/%([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+    .replace(/[\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF\uFFFE\uFFFF]/g, '');
+
+const validateComment = ({ html, text }) => {
+  const trimmedText = (text || '').trim();
+  const errors = [], warnings = [];
+
+  if (html.length > 102400) {
+    errors.push('Input too large (max 100 KB raw HTML)');
+    return { valid: false, errors, warnings };
+  }
+
+  const percentDecoded = html.replace(/%([0-9a-fA-F]{2})/g, (_, h) =>
+    String.fromCharCode(parseInt(h, 16)));
+  if (/\x00/.test(percentDecoded))
+    errors.push('Null byte detected (possible WAF bypass attempt)');
+  if (INJECTION_PATTERNS.some(p => p.test(percentDecoded)))
+    errors.push('Injection pattern detected in percent-decoded input');
+
+  if (/[\x7F-\x9F]/.test(html))
+    errors.push('C1 control characters detected');
+
+  if (trimmedText.length < 1 || trimmedText.length > 8000)
+    errors.push('Length must be 1–8000 characters');
+
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(trimmedText))
+    errors.push('Invalid control characters detected');
+
+  if (/(.)\1{14,}/.test(trimmedText))
+    warnings.push('Excessive character repetition (possible spam)');
+
+  const normHtml = normalizeHtml(html);
+  if (INJECTION_PATTERNS.some(p => p.test(normHtml)))
+    errors.push('Potentially unsafe HTML/script patterns detected');
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const disallowedTag = [...tmp.querySelectorAll('*')].find(el => !SAFE_TAGS.has(el.tagName));
+  if (disallowedTag)
+    errors.push(`Tag not allowed: <${disallowedTag.tagName.toLowerCase()}>`);
+
+  let attrError = null;
+  tmp.querySelectorAll('*').forEach(el => {
+    if (attrError) return;
+    const isAnchor = el.tagName === 'A';
+    Array.from(el.attributes).forEach(attr => {
+      if (attrError) return;
+      const name = attr.name.toLowerCase();
+      if ((name === 'rel' || name === 'target') && !isAnchor) {
+        attrError = `Attribute "${name}" only allowed on <a>`; return;
+      }
+      if (!SAFE_ATTRS.has(name)) { attrError = `Attribute not allowed: ${name}`; return; }
+      if (name === 'href') {
+        const raw = attr.value.trim();
+        const decoded = decodeHtmlEntities(raw);
+        if (decoded !== '' && !decoded.startsWith('#') && !/^https?:\/\//i.test(decoded))
+          attrError = `Unsafe link target: ${raw.slice(0, 60)}`;
+      }
+      if (name === 'target') {
+        if (!SAFE_TARGET_VALUES.has(attr.value.trim().toLowerCase()))
+          attrError = `Unsafe target value: ${attr.value.slice(0, 20)}`;
+      }
+    });
+  });
+  if (attrError) errors.push(attrError);
+
+  const decodedText = trimmedText
+    .replace(/&[a-z][a-z0-9]*;/gi, 'X')
+    .replace(/&#[0-9]+;/gi, 'X')
+    .replace(/&#x[0-9a-f]+;/gi, 'X');
+  const safeChars = /^[\p{L}\p{N}\p{P}\p{S}\p{Z}\p{Emoji_Presentation}\n\r\t\s]*$/u;
+  if (!safeChars.test(decodedText))
+    errors.push('Unsupported or unsafe characters detected');
+
+  return { valid: errors.length === 0, errors, warnings };
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TEST HELPERS
+═══════════════════════════════════════════════════════════════════════════════ */
+// Simulates what a contenteditable editor produces (browser DOM round-trip)
+function fromEditor(raw) {
+  const el = document.createElement('div');
+  el.innerHTML = raw;
+  return { html: el.innerHTML, text: el.innerText || el.textContent || '' };
+}
+// Passes the raw string directly — used for payloads where DOM would strip the threat
+function fromRaw(raw) {
+  return { html: raw, text: raw };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TEST CASES
+   expectValid:   false → must be blocked  |  true → must pass
+   expectWarning: true  → valid:true but warnings non-empty
+   raw:           true  → skip DOM round-trip (use fromRaw)
+═══════════════════════════════════════════════════════════════════════════════ */
+const GROUPS = [
+  {
+    title: 'Filter Bypasser — must fail',
+    cases: [
+      {
+        name: 'Event handler injection',
+        payload: 'Hello <img src=x onerror=alert(1)>',
+        expectValid: false,
+        note: 'onerror → attribute allow-list; img → tag allow-list',
+      },
+      {
+        name: 'javascript: href',
+        payload: '<a href="javascript:alert(\'XSS\')">Click Here</a>',
+        expectValid: false,
+        note: 'Caught by href protocol check',
+      },
+      {
+        name: 'Case-insensitive tag bypass',
+        payload: '<ScRiPt>alert(\'Hi\')</ScRiPt>',
+        expectValid: false,
+        note: 'Caught by injection pattern on normalised HTML + tag allow-list',
+      },
+      {
+        name: 'data:text/html base64 href',
+        payload: '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">Click me</a>',
+        expectValid: false,
+        note: 'Caught by data:text/html injection pattern + unsafe href',
+      },
+      {
+        name: 'data:image/svg+xml href (NEW v4)',
+        payload: '<a href="data:image/svg+xml,<svg onload=alert(1)>">SVG</a>',
+        expectValid: false,
+        note: 'data:image/svg pattern — was missing in v3',
+      },
+      {
+        name: 'HTML entity-encoded javascript: href (NEW v4)',
+        payload: '<a href="&#x6A;avascript:alert(1)">Click</a>',
+        expectValid: false,
+        note: 'href decoded via decodeHtmlEntities before protocol check — was missing in v3',
+      },
+      {
+        name: 'Decimal entity-encoded javascript: href (NEW v4)',
+        payload: '<a href="&#106;avascript:alert(1)">Click</a>',
+        expectValid: false,
+        note: 'Same fix — decimal entity variant',
+      },
+      {
+        name: 'SVG onload injection (NEW v4)',
+        payload: '<svg onload=alert(1)>',
+        expectValid: false,
+        note: '<svg> pattern added; onload= also caught by attribute check',
+      },
+      {
+        name: 'base tag hijack (NEW v4)',
+        payload: '<base href="https://evil.com/">',
+        expectValid: false,
+        note: '<base> pattern added — hijacks all relative URLs on the page',
+      },
+      {
+        name: 'embed tag (NEW v4)',
+        payload: '<embed src="https://evil.com/x.swf">',
+        expectValid: false,
+        note: '<embed> pattern added + tag allow-list',
+      },
+      {
+        name: 'Unsafe target value (NEW v4)',
+        payload: '<a href="https://example.com" target="evil">Link</a>',
+        expectValid: false,
+        note: 'target must be one of _blank _self _parent _top',
+      },
+      {
+        name: 'rel on non-anchor (NEW v4)',
+        payload: '<span rel="noopener">text</span>',
+        expectValid: false,
+        note: 'rel only permitted on <a> tags',
+      },
+    ],
+  },
+  {
+    title: 'Structural Attack — must fail',
+    cases: [
+      {
+        name: 'Null byte injection',
+        payload: 'Hello%00<script>alert(1)</script>',
+        raw: true,
+        expectValid: false,
+        note: 'Step 0b: percent-decoded, null byte detected + script pattern caught',
+      },
+      {
+        name: 'C1 control characters',
+        payload: 'Hidden\x9CControl\x9DChars',
+        raw: true,
+        expectValid: false,
+        note: 'Step 0c: checked on raw HTML before browser normalisation strips them',
+      },
+    ],
+  },
+  {
+    title: 'Structural Attack — warning (not hard error)',
+    cases: [
+      {
+        name: 'ReDoS / spam repetition',
+        payload: 'Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        expectValid: true,
+        expectWarning: true,
+        note: 'Warning tier — valid:true, but warnings non-empty',
+      },
+    ],
+  },
+  {
+    title: 'Sanity — must pass',
+    cases: [
+      {
+        name: 'Plain text with punctuation and emoji',
+        payload: 'Great post! Really helpful 👍 — thanks for sharing.',
+        expectValid: true,
+        note: 'Clean plain text',
+      },
+      {
+        name: 'Safe rich text',
+        payload: '<b>Bold</b>, <i>italic</i>, <a href="https://example.com" target="_blank" rel="noopener">link</a>',
+        expectValid: true,
+        note: 'Allowed tags + safe href + valid target + rel on anchor',
+      },
+      {
+        name: 'Ordered and unordered lists',
+        payload: '<ul><li>Item one</li><li>Item two</li></ul><ol><li>First</li></ol>',
+        expectValid: true,
+        note: 'ul/ol/li all in SAFE_TAGS',
+      },
+      {
+        name: 'Hex entity in text (NEW v4)',
+        payload: 'Caf&#x00E9; and na&#xEF;ve',
+        expectValid: true,
+        note: '&#xHEX; entities stripped before char allow-list — was failing in v3',
+      },
+      {
+        name: 'Accented and non-Latin characters',
+        payload: 'Héllo wörld — Привет — 日本語 — العربية',
+        expectValid: true,
+        note: '\\p{L} covers all Unicode letters',
+      },
+    ],
+  },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RUNNER
+═══════════════════════════════════════════════════════════════════════════════ */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let totalPass = 0, totalFail = 0;
+const output = document.getElementById('output');
+
+GROUPS.forEach(group => {
+  const groupEl = document.createElement('div');
+  groupEl.className = 'group';
+  groupEl.innerHTML = `<div class="group-title">${group.title}</div>`;
+
+  group.cases.forEach(tc => {
+    const input  = tc.raw ? fromRaw(tc.payload) : fromEditor(tc.payload);
+    const result = validateComment(input);
+
+    let testPassed;
+    if (tc.expectWarning) {
+      testPassed = result.valid === true && result.warnings.length > 0;
+    } else {
+      testPassed = result.valid === tc.expectValid;
+    }
+    testPassed ? totalPass++ : totalFail++;
+
+    const expectedLabel = tc.expectWarning ? 'expect: warn'
+      : tc.expectValid ? 'expect: pass' : 'expect: fail';
+
+    const verdictLabel = testPassed
+      ? (tc.expectWarning ? 'WARNED ✓' : tc.expectValid ? 'PASSED ✓' : 'BLOCKED ✓')
+      : (result.valid     ? 'PASSED — should have failed ✕' : 'BLOCKED — should have passed ✕');
+
+    const errList  = result.errors.length   ? result.errors.map(e => `<code>${escHtml(e)}</code>`).join(' · ')   : '—';
+    const warnList = result.warnings.length ? result.warnings.map(w => `<code>${escHtml(w)}</code>`).join(' · ') : '—';
+
+    const caseEl = document.createElement('div');
+    caseEl.className = 'case';
+    caseEl.innerHTML = `
+      <div class="case-header">
+        <div class="badge ${testPassed ? 'ok' : 'err'}">${testPassed ? '✓' : '✕'}</div>
+        <div class="case-name">${escHtml(tc.name)}</div>
+        <div class="case-expected">${expectedLabel}</div>
+      </div>
+      <div class="case-body">
+        <div class="payload">${escHtml(tc.payload)}</div>
+        <div class="verdict ${testPassed ? 'correct' : 'wrong'}">
+          <span class="label">${verdictLabel}</span>
+        </div>
+        <div class="detail">errors: ${errList}</div>
+        <div class="detail">warnings: ${warnList}</div>
+        <div class="note">${escHtml(tc.note)}</div>
+      </div>`;
+    groupEl.appendChild(caseEl);
+  });
+
+  output.appendChild(groupEl);
+});
+
+const summary = document.getElementById('summary');
+summary.innerHTML = `
+  <span class="pill total">${totalPass + totalFail} tests</span>
+  <span class="pill pass">✓ ${totalPass} passed</span>
+  ${totalFail ? `<span class="pill fail">✕ ${totalFail} failed</span>` : '<span class="pill pass">0 failures</span>'}`;
+</script>
+</body>
+</html>
