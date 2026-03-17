@@ -2,6 +2,25 @@
 
 A hardened, OWASP-aligned client-side validator for rich-text comment fields. Defends against XSS, injection, and obfuscation attacks across 8 independent check layers — without blocking legitimate formatted content.
 
+# ⚠️ The "Golden Rule" of WAFs
+if you are trying to bypassing WAF rules, please keep in mind: Validation is not Sanitization.
+
+Server-Side is King: An attacker can easily bypass your handleSubmit by using a tool like Postman or curl. This script is only for well-behaved users.  Implement with server-side sanitization layer using a library like DOMPurify.
+
+Output Encoding: The most important OWASP rule is to encode on output. Even if a user "bypasses" this regex and saves <script>, it only becomes dangerous if your website renders it as HTML.
+
+Safe: element.textContent = userComment;
+Unsafe: element.innerHTML = userComment;
+
+# The Defense-in-Depth Lifecycle
+In a professional cloud architecture, sanitization is one part of a multi-stage funnel.
+
+Client-Side (User Interface): Your JavaScript (v4.1) provides immediate feedback to the user and catches 99% of accidental or low-effort "script-kiddie" attacks.
+
+Edge/WAF (Azure/CloudFlare): The Web Application Firewall inspects the HTTP request for common OWASP patterns (SQLi, XSS) before it even reaches your server.
+
+Server-Side (DOMPurify): The final "Gatekeeper." It parses the actual HTML structure and ensures it matches your specific business rules (e.g., "We only allow bold and links").
+
 ## Files
 
 | File | Purpose |
