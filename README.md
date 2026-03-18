@@ -30,7 +30,7 @@ Server-Side (DOMPurify): The final "Gatekeeper." It parses the actual HTML struc
 | `ValidatorUI.HTML` | Interactive test UI — open in a browser to test payloads live |
 | `CalidatorTest.HTML` | Automated test suite — 20 attack cases with pass/fail reporting |
 
-
+https://www.npmjs.com/package/dompurify
 ---
 
 ## Quick Start
