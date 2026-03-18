@@ -26,7 +26,7 @@ Server-Side (DOMPurify): The final "Gatekeeper." It parses the actual HTML struc
 | File | Purpose |
 |---|---|
 | `HTMLSanitiser.js` |Normalises browser-injected markup before the validator sees it. |
-| `ValidateComment.js` | Core validator module v4.1 — import this into your project |
+| `validatecomment.js` | Core validator module v4.1 — import this into your project |
 | `ValidatorUI.HTML` | Interactive test UI — open in a browser to test payloads live |
 | `CalidatorTest.HTML` | Automated test suite — 20 attack cases with pass/fail reporting |
 
@@ -36,13 +36,13 @@ Server-Side (DOMPurify): The final "Gatekeeper." It parses the actual HTML struc
 ## Quick Start
 
 ```js
-import { validateComment, sanitizePaste } from './validateCommentImproved.js';
+import { validatecomment, sanitizePaste } from './validatecomment.js';
 
 const editor = document.getElementById('my-editor');
 
 // Validate on input
 editor.addEventListener('input', () => {
-  const result = validateComment({
+  const result = validatecomment({
     html: editor.innerHTML,   // raw innerHTML — for structural checks
     text: editor.innerText,   // plain text   — for length and char checks
   });
@@ -167,7 +167,7 @@ Requires a browser that supports:
 
 ### Editor HTML Sanitiser (UI layer)
 
-Before passing `editor.innerHTML` to `validateComment`, strip browser-injected markup. Different browsers produce different output from `execCommand`:
+Before passing `editor.innerHTML` to `validatecomment`, strip browser-injected markup. Different browsers produce different output from `execCommand`:
 
 | Browser | Bold output | Problem |
 |---|---|---|
@@ -204,7 +204,7 @@ function sanitiseEditorHtml(html) {
 }
 ```
 
-Pass the sanitised output to `validateComment`, but run threat-detection rules (null byte, C1 chars) on the **raw** `editor.innerHTML` before sanitisation — the sanitiser strips the evidence.
+Pass the sanitised output to `validatecomment`, but run threat-detection rules (null byte, C1 chars) on the **raw** `editor.innerHTML` before sanitisation — the sanitiser strips the evidence.
 
 ### Server-Side Pairing
 
@@ -221,7 +221,7 @@ Always re-validate and sanitise on the server. Recommended libraries:
 ### Change max length
 
 ```js
-// In validateCommentImproved.js, step 1
+// In validatecomment.js, step 1
 if (trimmedText.length < 1 || trimmedText.length > 8000)
 //                                                  ^^^^  change this
 ```
@@ -339,7 +339,7 @@ Contributions are welcome. By submitting a pull request or issue you agree that 
 - Open an issue before submitting large changes so the approach can be discussed
 - Keep pull requests focused — one fix or feature per PR
 - Include a test case in `validator.test.html` for any new attack vector or behaviour change
-- Update the changelog in `README.md` and the JSDoc header in `validateCommentImproved.js`
+- Update the changelog in `README.md` and the JSDoc header in `validatecomment.js`
 
 ### Security Vulnerabilities
 
