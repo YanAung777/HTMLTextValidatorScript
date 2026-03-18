@@ -34,13 +34,18 @@
  *  - normalizeHtml now correctly called for injection pattern check (was missing)
  *  - Size cap moved before percent-decode (avoids decoding oversized payloads)
  *
+ * v4.1 → v4.2
+ * - Added explicit block on xlink:href (legacy SVG vector)
+ * - Added SVG animation elements to injection patterns:
+ *   animate, set, animateMotion, animateTransform
+ * - Expanded data: URI patterns for extra coverage of common dangerous subtypes
+ * - Minor pattern list formatting / comments cleanup
  * Usage:
  *   const result = validateComment({ html: editor.innerHTML, text: editor.innerText });
  *   // result: { valid: boolean, errors: string[], warnings: string[] }
  */
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
 const SAFE_TAGS = new Set([
   'B', 'I', 'U', 'EM', 'STRONG',
   'A', 'UL', 'OL', 'LI',
@@ -51,40 +56,46 @@ const SAFE_ATTRS = new Set(['href', 'target', 'rel', 'title', 'class']);
 
 const SAFE_TARGET_VALUES = new Set(['_blank', '_self', '_parent', '_top']);
 
-// Protocols explicitly permitted in href values.
-// mailto: and tel: are legitimate in comment links.
-// https?:// is handled separately. Protocol-relative (//host) is blocked.
+// Allowed protocols in href.
+// mailto: and tel: are legitimate. Relative paths and fragments allowed.
+// Protocol-relative URLs (//evil.com) blocked separately.
 const ALLOWED_PROTOCOLS = /^(https?|mailto|tel):/i;
 
 const INJECTION_PATTERNS = [
-  /javascript\s*:/i,                    // javascript: URLs
-  /vbscript\s*:/i,                      // vbscript: URLs
-  /data\s*:\s*text\/(html|xml)/i,       // data:text/html, data:text/xml
-  /data\s*:\s*(image\/svg|application\/)/i, // data:image/svg+xml, data:application/*
-  /expression\s*\(/i,                   // old IE CSS expression()
-  /on[a-z]{2,}\s*=/i,                   // onclick=, onmouseover=, onload= etc.
-  /<[^>]*\bon\w+\s*=/i,                 // <tag on...= (belt-and-braces)
-  /<[^>]*script/i,                      // <script
-  /<[^>]*iframe/i,                      // <iframe
-  /<[^>]*object/i,                      // <object
-  /<[^>]*embed/i,                       // <embed
-  /<[^>]*svg/i,                         // <svg onload=...>
-  /<[^>]*math/i,                        // <math> namespace attacks
-  /<[^>]*base[\s>]/i,                   // <base href=...> hijacks relative URLs
-  /formaction\s*=/i,                    // <button formaction="javascript:...">
+  // Dangerous protocol handlers
+  /javascript\s*:/i,
+  /vbscript\s*:/i,
+
+  // data: URI dangerous subtypes
+  /data\s*:\s*text\/(html|xml|xhtml)/i,
+  /data\s*:\s*image\/svg\+xml/i,
+  /data\s*:\s*application\/(xhtml\+xml|.*xml)/i,
+  /data\s*:\s*(image\/svg|application\/)/i, // catch-all for svg / app subtypes
+
+  // Old IE / legacy vectors
+  /expression\s*\(/i,
+
+  // Event handlers (both attribute and inline forms)
+  /on[a-z]{2,}\s*=/i,
+  /<[^>]*\bon\w+\s*=/i,
+
+  // Forbidden / dangerous tags
+  /<[^>]*script/i,
+  /<[^>]*iframe/i,
+  /<[^>]*object/i,
+  /<[^>]*embed/i,
+  /<[^>]*svg/i,
+  /<[^>]*math/i,
+  /<[^>]*base[\s>]/i,
+  /formaction\s*=/i,
+
+  // SVG animation elements that can carry javascript: in href / to / values
+  /<[^>]*animate/i,           // animate, animateTransform, animateMotion
+  /<[^>]*set/i,               // <set attributeName="href" to="javascript:..."/>
+  /<[^>]*animatetransform/i,
+  /<[^>]*animatemotion/i,
 ];
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-/**
- * Decode numeric HTML entities without any DOM dependency.
- * Handles: decimal &#123; and hex &#x7B;
- * Named entities (&amp; &lt; etc.) are intentionally left as-is —
- * they cannot encode protocol characters so are irrelevant to href validation,
- * and leaving them literal avoids false decoding of safe text.
- *
- * Works in Node.js, Workers, SSR, and browser environments.
- */
 const decodeEntities = (s) =>
   s.replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code) => {
     const n = code.startsWith('x') || code.startsWith('X')
@@ -93,16 +104,6 @@ const decodeEntities = (s) =>
     return (n > 0 && n < 0x110000) ? String.fromCharCode(n) : '';
   });
 
-/**
- * Normalise raw HTML before injection pattern matching.
- * Collapses common tag-splitting bypass techniques:
- *   <ScRiPt>        → handled by /i flag on patterns
- *   <scr%09ipt>     → tab decoded + stripped
- *   <scr\x00ipt>    → null byte stripped
- *   <s\u200Bcript>  → zero-width space stripped
- *
- * IMPORTANT: only used for pattern matching, never for DOM parsing.
- */
 const normalizeHtml = (html) =>
   html
     .replace(/%([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
@@ -110,32 +111,20 @@ const normalizeHtml = (html) =>
     .replace(/[\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u2064\uFEFF\uFFFE\uFFFF]/g, '');
 
 // ── Validator ──────────────────────────────────────────────────────────────────
-
-/**
- * @param {{ html: string, text: string }} input
- *   html — raw innerHTML from the contenteditable element
- *   text — innerText (plain text) from the same element
- * @returns {{ valid: boolean, errors: string[], warnings: string[] }}
- */
 const validateComment = ({ html, text }) => {
   const trimmedText = (text || '').trim();
-  const errors   = [];
+  const errors = [];
   const warnings = [];
 
-  // ── 0. Raw pre-checks (before ANY normalisation or DOM parsing) ───────────────
-
-  // 0a. Size cap first — avoids decoding or parsing oversized payloads
+  // ── 0. Raw pre-checks ───────────────────────────────────────────────────────
   if (html.length > 102_400) {
     errors.push('Input too large (max 100 KB raw HTML)');
     return { valid: false, errors, warnings };
   }
 
-  // 0b. Percent-decode once for two independent threat checks:
-  //     (i)  null byte detection — common WAF bypass signal
-  //     (ii) injection patterns on the decoded string — catches <script>
-  //          that follows a %00 before normalizeHtml strips \x00
   const percentDecoded = html.replace(
-    /%([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))
+    /%([0-9a-fA-F]{2})/g,
+    (_, h) => String.fromCharCode(parseInt(h, 16))
   );
 
   if (/\x00/.test(percentDecoded))
@@ -144,40 +133,36 @@ const validateComment = ({ html, text }) => {
   if (INJECTION_PATTERNS.some(p => p.test(percentDecoded)))
     errors.push('Injection pattern detected in percent-decoded input');
 
-  // 0c. C1 control characters on the raw HTML string.
-  //     Browsers silently drop \x7F–\x9F from innerText — must check raw HTML.
   if (/[\x7F-\x9F]/.test(html))
     errors.push('C1 control characters detected');
 
-  // ── 1. Length (text layer) ───────────────────────────────────────────────────
+  // ── 1. Length check ─────────────────────────────────────────────────────────
   if (trimmedText.length < 1 || trimmedText.length > 8000)
     errors.push('Length must be 1–8000 characters');
 
-  // ── 2. C0 control characters (text layer, second line of defence) ────────────
-  // C1 caught above. \t \n \r intentionally excluded.
+  // ── 2. C0 controls (text layer) ────────────────────────────────────────────
   if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(trimmedText))
     errors.push('Invalid control characters detected');
 
-  // ── 3. Spam / ReDoS guard ────────────────────────────────────────────────────
+  // ── 3. Spam guard ───────────────────────────────────────────────────────────
   if (/(.)\1{14,}/.test(trimmedText))
     warnings.push('Excessive character repetition (possible spam)');
 
-  // ── 4. Injection patterns on normalised HTML ─────────────────────────────────
-  // normalizeHtml decodes %xx, strips control chars AND invisible Unicode —
-  // collapsing tag-splitting tricks like <s\u200Bcript> before matching.
+  // ── 4. Injection patterns on normalized HTML ────────────────────────────────
   if (INJECTION_PATTERNS.some(p => p.test(normalizeHtml(html))))
     errors.push('Potentially unsafe HTML/script patterns detected');
 
-  // ── 5. DOM-based tag allow-list ──────────────────────────────────────────────
+  // ── 5. DOM-based tag allow-list ─────────────────────────────────────────────
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
 
-  const disallowedTag = [...tmp.querySelectorAll('*')]
-    .find(el => !SAFE_TAGS.has(el.tagName));
+  const disallowedTag = [...tmp.querySelectorAll('*')].find(
+    el => !SAFE_TAGS.has(el.tagName)
+  );
   if (disallowedTag)
     errors.push(`Tag not allowed: <${disallowedTag.tagName.toLowerCase()}>`);
 
-  // ── 6. Attribute allow-list + href / target enforcement ──────────────────────
+  // ── 6. Attribute allow-list + href/target enforcement ───────────────────────
   let attrError = null;
   tmp.querySelectorAll('*').forEach(el => {
     if (attrError) return;
@@ -187,7 +172,13 @@ const validateComment = ({ html, text }) => {
       if (attrError) return;
       const name = attr.name.toLowerCase();
 
-      // rel and target only permitted on <a>
+      // Explicitly forbid xlink:href (legacy SVG XSS vector)
+      if (name === 'xlink:href') {
+        attrError = 'Forbidden attribute: xlink:href';
+        return;
+      }
+
+      // rel and target only on <a>
       if ((name === 'rel' || name === 'target') && !isAnchor) {
         attrError = `Attribute "${name}" is only allowed on <a> tags`;
         return;
@@ -199,13 +190,11 @@ const validateComment = ({ html, text }) => {
       }
 
       if (name === 'href') {
-        const raw     = attr.value.trim();
+        const raw = attr.value.trim();
         const decoded = decodeEntities(raw);
-
         const safe =
           decoded === '' ||
           decoded.startsWith('#') ||
-          // Relative paths allowed; protocol-relative (//host) blocked
           (decoded.startsWith('/') && !decoded.startsWith('//')) ||
           ALLOWED_PROTOCOLS.test(decoded);
 
@@ -219,10 +208,10 @@ const validateComment = ({ html, text }) => {
       }
     });
   });
+
   if (attrError) errors.push(attrError);
 
-  // ── 7. Character allow-list (text layer) ─────────────────────────────────────
-  // Strip named, decimal, and hex entities before testing — all valid in rich text.
+  // ── 7. Character allow-list (text layer) ────────────────────────────────────
   const decodedText = trimmedText
     .replace(/&[a-z][a-z0-9]*;/gi, 'X')
     .replace(/&#[0-9]+;/gi, 'X')
@@ -235,19 +224,7 @@ const validateComment = ({ html, text }) => {
   return { valid: errors.length === 0, errors, warnings };
 };
 
-// ── Paste sanitizer ───────────────────────────────────────────────────────────
-
-/**
- * Strip all HTML from pasted content, inserting plain text at the caret.
- * Attach to the contenteditable element's 'paste' event.
- *
- * Note: document.execCommand('insertText') is deprecated but remains the only
- * synchronous way to insert at the caret in a contenteditable. The Async
- * Clipboard API cannot target a caret position in a synchronous event handler.
- *
- * Usage:
- *   editor.addEventListener('paste', sanitizePaste);
- */
+// ── Paste sanitizer (unchanged) ───────────────────────────────────────────────
 const sanitizePaste = (e) => {
   e.preventDefault();
   const plain = e.clipboardData?.getData('text/plain') ?? '';
