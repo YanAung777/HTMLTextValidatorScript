@@ -40,11 +40,15 @@
  *   animate, set, animateMotion, animateTransform
  * - Expanded data: URI patterns for extra coverage of common dangerous subtypes
  * - Minor pattern list formatting / comments cleanup
+
+ * v4.3 → v4.4
+ * - Added more SVG-related dangerous elements to injection patterns:
+ *   symbol, marker, filter, clipPath, mask, defs, linearGradient, radialGradient
+ *   (these can facilitate referencing, reuse, filtering, or resource-loading attacks)
  * Usage:
  *   const result = validateComment({ html: editor.innerHTML, text: editor.innerText });
  *   // result: { valid: boolean, errors: string[], warnings: string[] }
  */
-
 // ── Constants ──────────────────────────────────────────────────────────────────
 const SAFE_TAGS = new Set([
   'B', 'I', 'U', 'EM', 'STRONG',
@@ -90,10 +94,22 @@ const INJECTION_PATTERNS = [
   /formaction\s*=/i,
 
   // SVG animation elements that can carry javascript: in href / to / values
-  /<[^>]*animate/i,           // animate, animateTransform, animateMotion
-  /<[^>]*set/i,               // <set attributeName="href" to="javascript:..."/>
+  /<[^>]*animate/i,              // animate, animateTransform, animateMotion
+  /<[^>]*set/i,                  // <set attributeName="href" to="javascript:..."/>
   /<[^>]*animatetransform/i,
   /<[^>]*animatemotion/i,
+
+  // Additional dangerous SVG elements
+  /<[^>]*foreignobject/i,        // Can embed arbitrary HTML / <script> inside SVG
+  /<[^>]*use/i,                  // Can reference external or malicious content
+  /<[^>]*symbol/i,               // Reusable definitions, often combined with <use>
+  /<[^>]*marker/i,               // Can contain shapes with events or be referenced
+  /<[^>]*filter/i,               // FeImage / fe* primitives can load resources
+  /<[^>]*clippath/i,             // Clipping paths that reference content
+  /<[^>]*mask/i,                 // Masks that reference external content
+  /<[^>]*defs/i,                 // Container for reusable (potentially malicious) defs
+  /<[^>]*lineargradient/i,       // Gradients that can reference stops / images
+  /<[^>]*radialgradient/i,       // Same as linearGradient
 ];
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const decodeEntities = (s) =>
