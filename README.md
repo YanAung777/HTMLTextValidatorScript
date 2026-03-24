@@ -147,6 +147,8 @@ db.query('INSERT INTO comments (body) VALUES (?)', [commentText]);
 
 **Server-side XSS** — this validator runs in the browser. You must also sanitise HTML server-side before storing or rendering it. Use a library like [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html](https://github.com/apostrophecms/sanitize-html) on the server.
 
+**https://wiki.sei.cmu.edu/confluence/spaces/java/pages/88487713/IDS00-J.+Prevent+SQL+injection
+
 **Authentication / authorisation** — out of scope.
 
 **Rate limiting / spam at scale** — the spam repetition check is a basic signal only. For production moderation use a dedicated service.
