@@ -145,7 +145,7 @@ The validator runs 8 independent layers in order. An input must pass all of them
 db.query('INSERT INTO comments (body) VALUES (?)', [commentText]);
 ```
 
-**Server-side XSS** — this validator runs in the browser. You must also sanitise HTML server-side before storing or rendering it. Use a library like [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html]([https://github.com/apostrophecms/sanitize-html](https://github.com/apostrophecms/apostrophe/tree/main/packages/sanitize-html)) on the server.
+**Server-side XSS** — this validator runs in the browser. You must also sanitise HTML server-side before storing or rendering it. Use a library like [DOMPurify](https://github.com/cure53/DOMPurify) or [sanitize-html]([https://github.com/apostrophecms/sanitize-html](https://github.com/apostrophecms/apostrophe/tree/main/packages/sanitize-html)]) on the server.
 
 **https://wiki.sei.cmu.edu/confluence/spaces/java/pages/88487713/IDS00-J.+Prevent+SQL+injection
 
