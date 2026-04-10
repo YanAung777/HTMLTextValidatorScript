@@ -18,6 +18,7 @@ In a professional cloud architecture, sanitization is one part of a multi-stage 
 Client-Side (User Interface): This JavaScript provides immediate feedback to the user and catches of accidental or low-effort "script-kiddie" attacks.
 
 Edge/WAF (Azure/CloudFlare): The Web Application Firewall inspects the HTTP request for common OWASP patterns (SQLi, XSS) before it even reaches backend APIs.
+see example : https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-transformation.html
 
 Server-Side (DOMPurify): The final "Gatekeeper." It parses the actual HTML structure and ensures it matches your specific business rules (e.g., "We only allow bold and links").
 
